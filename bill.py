@@ -1,103 +1,132 @@
 import streamlit as st
 import pandas as pd
 from datetime import date
+from fpdf import FPDF
+from num2words import num2words
+import base64
 
-# 1. Page Configuration
-st.set_page_config(page_title="Web Billing App", layout="wide")
+st.set_page_config(page_title="Vehicle Billing Software", layout="wide")
 
-# 2. Initialize Session State (This saves seller details while the app is running)
-if 'seller' not in st.session_state:
-    st.session_state.seller = {
-        "company_name": "Akash Enterprises",
-        "address": "11, Main Market, Chandni Chowk, New Delhi",
-        "phone": "+91 9981278197",
-        "email": "akashenterprises@gmail.com",
-        "gstin": "08AALCR2857A1ZD",
-        "pan": "AVHPC6971A"
-    }
-
-# 3. Create Navigation Tabs
-tab_create, tab_seller = st.tabs(["Create Invoice", "Edit Seller Details"])
-
-# --- TAB: EDIT SELLER DETAILS ---
-with tab_seller:
-    st.header("Update Seller Information")
-    st.info("These details will appear at the top of every generated invoice.")
+# --- PDF GENERATION FUNCTION ---
+def create_pdf(invoice_no, cust_name, vehicle, pricing):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
     
-    with st.form("seller_form"):
-        new_name = st.text_input("Company Name", value=st.session_state.seller["company_name"])
-        new_address = st.text_input("Address", value=st.session_state.seller["address"])
-        col1, col2 = st.columns(2)
-        new_phone = col1.text_input("Phone", value=st.session_state.seller["phone"])
-        new_email = col2.text_input("Email", value=st.session_state.seller["email"])
-        col3, col4 = st.columns(2)
-        new_gstin = col3.text_input("GSTIN", value=st.session_state.seller["gstin"])
-        new_pan = col4.text_input("PAN Number", value=st.session_state.seller["pan"])
+    # Header
+    pdf.set_font("Arial", 'B', 16)
+    pdf.cell(200, 10, txt="TAX INVOICE - VEHICLE SALES", ln=True, align='C')
+    pdf.set_font("Arial", size=10)
+    pdf.cell(200, 10, txt=f"Invoice No: {invoice_no} | Date: {date.today()}", ln=True, align='R')
+    pdf.line(10, 30, 200, 30)
+    
+    # Customer Details
+    pdf.ln(5)
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(200, 10, txt="Bill To:", ln=True)
+    pdf.set_font("Arial", size=11)
+    pdf.cell(200, 8, txt=f"Name: {cust_name}", ln=True)
+    
+    # Vehicle Details
+    pdf.ln(5)
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(200, 10, txt="Vehicle Details:", ln=True)
+    pdf.set_font("Arial", size=11)
+    pdf.cell(100, 8, txt=f"Model: {vehicle['model']} | Color: {vehicle['color']}", ln=True)
+    pdf.cell(100, 8, txt=f"Engine No: {vehicle['engine']} | Chassis No: {vehicle['chassis']}", ln=True)
+    pdf.cell(100, 8, txt=f"VIN: {vehicle['vin']}", ln=True)
+    
+    # Pricing Table Header
+    pdf.ln(10)
+    pdf.set_font("Arial", 'B', 10)
+    pdf.cell(60, 10, 'Description', 1, 0, 'C')
+    pdf.cell(40, 10, 'Pre-Tax Amount', 1, 0, 'C')
+    pdf.cell(30, 10, f"GST ({pricing['gst_rate']}%)", 1, 0, 'C')
+    pdf.cell(30, 10, 'Discount', 1, 0, 'C')
+    pdf.cell(30, 10, 'Total', 1, 1, 'C')
+    
+    # Pricing Table Data
+    pdf.set_font("Arial", size=10)
+    pdf.cell(60, 10, vehicle['model'], 1, 0, 'L')
+    pdf.cell(40, 10, f"Rs. {pricing['pre_tax']:.2f}", 1, 0, 'R')
+    pdf.cell(30, 10, f"Rs. {pricing['tax_amt']:.2f}", 1, 0, 'R')
+    pdf.cell(30, 10, f"Rs. {pricing['discount']:.2f}", 1, 0, 'R')
+    pdf.cell(30, 10, f"Rs. {pricing['net_payable']:.2f}", 1, 1, 'R')
+    
+    # Totals and Words
+    pdf.ln(10)
+    pdf.set_font("Arial", 'B', 12)
+    pdf.cell(200, 10, txt=f"Ex-Showroom Price (Incl. Tax): Rs. {pricing['ex_showroom']:.2f}", ln=True, align='R')
+    pdf.cell(200, 10, txt=f"Final Net Payable: Rs. {pricing['net_payable']:.2f}", ln=True, align='R')
+    
+    pdf.ln(5)
+    pdf.set_font("Arial", 'I', 11)
+    amount_words = num2words(pricing['net_payable'], lang='en_IN').title()
+    pdf.cell(200, 10, txt=f"Amount in Words: Rupees {amount_words} Only", ln=True)
+    
+    return pdf.output(dest="S").encode("latin-1")
+
+# --- UI LAYOUT ---
+st.title("Vehicle Billing System")
+
+col1, col2 = st.columns(2)
+with col1:
+    st.subheader("Customer Details")
+    invoice_no = st.text_input("Invoice Number", "INV-1001")
+    cust_name = st.text_input("Customer Name")
+    
+    st.subheader("Vehicle Details")
+    model = st.text_input("Car Model (e.g., SUV LX 2024)")
+    color = st.text_input("Color")
+    engine = st.text_input("Engine Number")
+    chassis = st.text_input("Chassis Number")
+    vin = st.text_input("VIN Number")
+
+with col2:
+    st.subheader("Pricing & Tax")
+    ex_showroom = st.number_input("Ex-Showroom Price (Inclusive of GST)", min_value=0.0, value=1000000.0, step=1000.0)
+    gst_rate = st.number_input("GST Rate (%)", min_value=0.0, value=28.0, step=1.0)
+    discount = st.number_input("Discount Amount", min_value=0.0, value=0.0, step=500.0)
+    
+    # Core Mathematical Logic
+    if gst_rate >= 0:
+        pre_tax_price = ex_showroom / (1 + (gst_rate / 100))
+        tax_amount = ex_showroom - pre_tax_price
+    else:
+        pre_tax_price = ex_showroom
+        tax_amount = 0
         
-        if st.form_submit_button("Save Details"):
-            st.session_state.seller.update({
-                "company_name": new_name, "address": new_address,
-                "phone": new_phone, "email": new_email,
-                "gstin": new_gstin, "pan": new_pan
-            })
-            st.success("Seller details updated successfully!")
+    net_payable = ex_showroom - discount
 
-# --- TAB: CREATE INVOICE ---
-with tab_create:
-    st.header("Generate New Tax Invoice")
-    
-    # Invoice Metadata
-    col_meta1, col_meta2 = st.columns(2)
-    invoice_no = col_meta1.text_input("Invoice No.", "INV-001")
-    invoice_date = col_meta2.date_input("Invoice Date", date.today())
-    
     st.divider()
+    st.write("### Financial Breakdown")
+    st.write(f"**Price Before Tax:** Rs. {pre_tax_price:,.2f}")
+    st.write(f"**GST Amount:** Rs. {tax_amount:,.2f}")
+    st.write(f"**Ex-Showroom Price:** Rs. {ex_showroom:,.2f}")
+    st.write(f"**Discount Applied:** - Rs. {discount:,.2f}")
+    st.write(f"### Final Payable: Rs. {net_payable:,.2f}")
     
-    # Customer Details (BILL TO) - SHIP TO is removed
-    st.subheader("Bill To (Customer Details)")
-    col_c1, col_c2 = st.columns(2)
-    cust_name = col_c1.text_input("Customer Name")
-    cust_address = col_c1.text_area("Customer Address")
-    cust_phone = col_c2.text_input("Customer Phone")
-    cust_gstin = col_c2.text_input("Customer GSTIN (Optional)")
-    cust_pan = col_c2.text_input("Customer PAN (Optional)")
+    try:
+        words = num2words(net_payable, lang='en_IN').title()
+        st.info(f"**Amount in Words:** Rupees {words} Only")
+    except:
+        pass
+
+st.divider()
+
+# --- PDF GENERATION TRIGGER ---
+if st.button("Generate & Download PDF Bill", type="primary"):
+    vehicle_data = {"model": model, "color": color, "engine": engine, "chassis": chassis, "vin": vin}
+    pricing_data = {
+        "pre_tax": pre_tax_price, "tax_amt": tax_amount, "gst_rate": gst_rate, 
+        "ex_showroom": ex_showroom, "discount": discount, "net_payable": net_payable
+    }
     
-    st.divider()
+    pdf_bytes = create_pdf(invoice_no, cust_name, vehicle_data, pricing_data)
     
-    # Item Entry using an interactive data editor
-    st.subheader("Invoice Items")
-    st.write("Add your items below. The total amount will be calculated automatically.")
-    
-    # Create an empty dataframe for the user to edit
-    empty_df = pd.DataFrame(
-        [{"Item": "", "HSN": "", "Qty": 0, "Rate (Rs)": 0.0, "Tax %": 5.0}] * 3
+    st.download_button(
+        label="📥 Click here to Download PDF",
+        data=pdf_bytes,
+        file_name=f"{invoice_no}_{cust_name.replace(' ', '_')}.pdf",
+        mime="application/pdf"
     )
-    
-    edited_df = st.data_editor(empty_df, num_rows="dynamic", use_container_width=True)
-    
-    st.divider()
-    
-    # Calculate Totals
-    total_amount = 0
-    for index, row in edited_df.iterrows():
-        if row["Item"] != "":
-            qty = float(row["Qty"])
-            rate = float(row["Rate (Rs)"])
-            tax_rate = float(row["Tax %"]) / 100
-            
-            base_price = qty * rate
-            tax_amount = base_price * tax_rate
-            total_amount += (base_price + tax_amount)
-
-    st.subheader(f"Grand Total: Rs. {total_amount:.2f}")
-    
-    if st.button("Generate Final Bill (Preview)"):
-        st.success("Invoice Generated successfully!")
-        # Here you would typically integrate a PDF library like 'fpdf' or 'reportlab'
-        # to take the session_state and edited_df and write it to a downloadable file.
-        st.write("### Preview:")
-        st.json({
-            "Seller": st.session_state.seller,
-            "Customer": {"Name": cust_name, "Phone": cust_phone},
-            "Total": total_amount
-        })
