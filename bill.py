@@ -53,59 +53,62 @@ def generate_pdf(invoice_no, cust, veh, price, finance, seller):
     pdf.cell(90, 5, f"Email:   {cust['email']}", ln=1)
     pdf.cell(100, 5, f"Aadhar:  {cust['aadhar']}", ln=0)
     pdf.cell(90, 5, f"PAN:     {cust['pan']}", ln=1)
-    if cust['gstin']:
-        pdf.cell(190, 5, f"GSTIN:   {cust['gstin']}", ln=1)
+    
+    gst_text = cust['gstin'] if cust['gstin'] else "UNREGISTERED"
+    pdf.cell(100, 5, f"GSTIN:   {gst_text}", ln=0)
+    pdf.cell(90, 5, f"Place of Supply: {cust['pos']}", ln=1)
 
     pdf.line(10, pdf.get_y()+2, 200, pdf.get_y()+2)
     pdf.ln(5)
 
     # 3. MAIN BILLING TABLE (Vehicle Details inside)
     pdf.set_font("Arial", 'B', 9)
-    pdf.cell(90, 8, "Vehicle Description & Details", border=1, align='C')
-    pdf.cell(30, 8, "Base Rate (Rs)", border=1, align='C')
-    pdf.cell(35, 8, "Discount (Rs)", border=1, align='C')
-    pdf.cell(35, 8, "Ex-Showroom (Rs)", border=1, align='C', ln=1)
+    # Adjusted widths: 110 + 40 + 40 = 190 total width
+    pdf.cell(110, 8, "Vehicle Description & Details", border=1, align='C')
+    pdf.cell(40, 8, "Base Rate (Rs)", border=1, align='C')
+    pdf.cell(40, 8, "Ex-Showroom (Rs)", border=1, align='C', ln=1)
     
     # Table Body
     pdf.set_font("Arial", '', 9)
     
     # Row 1: Model & Pricing
-    pdf.cell(90, 6, f" {veh['model']} ({veh['color']})", border='LR', align='L')
-    pdf.cell(30, 6, f"{price['pre_tax']:,.2f}", border='LR', align='R')
-    pdf.cell(35, 6, f"{price['discount']:,.2f}", border='LR', align='R')
-    pdf.cell(35, 6, f"{price['ex_showroom']:,.2f}", border='LR', align='R', ln=1)
+    pdf.cell(110, 6, f" {veh['model']} ({veh['color']})", border='LR', align='L')
+    pdf.cell(40, 6, f"{price['pre_tax']:,.2f}", border='LR', align='R')
+    pdf.cell(40, 6, f"{price['ex_showroom']:,.2f}", border='LR', align='R', ln=1)
     
     # Rows 2-4: Specific Credentials (Blank pricing columns)
-    pdf.cell(90, 6, f" Engine No: {veh['engine']}", border='LR', align='L')
-    pdf.cell(30, 6, "", border='LR')
-    pdf.cell(35, 6, "", border='LR')
-    pdf.cell(35, 6, "", border='LR', ln=1)
+    pdf.cell(110, 6, f" Engine No: {veh['engine']}", border='LR', align='L')
+    pdf.cell(40, 6, "", border='LR')
+    pdf.cell(40, 6, "", border='LR', ln=1)
     
-    pdf.cell(90, 6, f" Chassis No: {veh['chassis']}", border='LR', align='L')
-    pdf.cell(30, 6, "", border='LR')
-    pdf.cell(35, 6, "", border='LR')
-    pdf.cell(35, 6, "", border='LR', ln=1)
+    pdf.cell(110, 6, f" Chassis No: {veh['chassis']}", border='LR', align='L')
+    pdf.cell(40, 6, "", border='LR')
+    pdf.cell(40, 6, "", border='LR', ln=1)
     
-    pdf.cell(90, 6, f" VIN Number: {veh['vin']}", border='LR', align='L')
-    pdf.cell(30, 6, "", border='LR')
-    pdf.cell(35, 6, "", border='LR')
-    pdf.cell(35, 6, "", border='LR', ln=1)
+    pdf.cell(110, 6, f" VIN Number: {veh['vin']}", border='LR', align='L')
+    pdf.cell(40, 6, "", border='LR')
+    pdf.cell(40, 6, "", border='LR', ln=1)
 
     # Close the table with a bottom line
-    pdf.cell(90, 0, "", border='T')
-    pdf.cell(30, 0, "", border='T')
-    pdf.cell(35, 0, "", border='T')
-    pdf.cell(35, 0, "", border='T', ln=1)
+    pdf.cell(110, 0, "", border='T')
+    pdf.cell(40, 0, "", border='T')
+    pdf.cell(40, 0, "", border='T', ln=1)
+
+    # Discount Row (Only shows if discount > 0)
+    if price['discount'] > 0:
+        pdf.set_font("Arial", '', 9)
+        pdf.cell(150, 8, "Less: Discount ", border=1, align='R')
+        pdf.cell(40, 8, f"- Rs. {price['discount']:,.2f}", border=1, align='R', ln=1)
 
     # Net Payable Row
     pdf.set_font("Arial", 'B', 10)
-    pdf.cell(155, 8, "FINAL NET PAYABLE (Ex-Showroom less Discount) : ", align='R')
-    pdf.cell(35, 8, f"Rs. {price['net_payable']:,.2f}", border=1, align='R', ln=1)
+    pdf.cell(150, 8, "FINAL NET PAYABLE : ", border=1, align='R')
+    pdf.cell(40, 8, f"Rs. {price['net_payable']:,.2f}", border=1, align='R', ln=1)
 
-    # 4. TAX BIFURCATION TABLE
+    # 4. TAX BREAKDOWN TABLE
     pdf.ln(5)
     pdf.set_font("Arial", 'B', 9)
-    pdf.cell(190, 6, "Tax Bifurcation Details:", ln=1)
+    pdf.cell(190, 6, "Tax Breakdown:", ln=1)
     
     pdf.cell(50, 8, "Price Before Tax", border=1, align='C')
     pdf.cell(40, 8, "GST Rate", border=1, align='C')
@@ -190,6 +193,7 @@ with tab_invoice:
         c_aadhar = st.text_input("Aadhar No.")
         c_pan = st.text_input("PAN No.")
         c_gstin = st.text_input("GST No. (If registered)")
+        c_pos = st.text_input("Place of Supply (e.g., Delhi, Chandigarh)")
 
     st.divider()
 
@@ -251,7 +255,7 @@ with tab_invoice:
 
     # 5. Generate Button
     if st.button("Generate & Download PDF", type="primary"):
-        customer_data = {"name": c_name, "address": c_address, "mobile": c_mobile, "email": c_email, "aadhar": c_aadhar, "pan": c_pan, "gstin": c_gstin}
+        customer_data = {"name": c_name, "address": c_address, "mobile": c_mobile, "email": c_email, "aadhar": c_aadhar, "pan": c_pan, "gstin": c_gstin, "pos": c_pos}
         vehicle_data = {"model": v_model, "color": v_color, "engine": v_engine, "chassis": v_chassis, "vin": v_vin}
         pricing_data = {"pre_tax": pre_tax, "tax_amt": tax_amt, "gst_rate": gst_rate, "ex_showroom": ex_showroom, "discount": discount, "net_payable": net_payable}
         finance_data = {"is_financed": is_financed, "bank": f_bank, "amount": f_amount, "ref_no": f_ref}
@@ -276,16 +280,4 @@ with tab_seller:
         sc1, sc2 = st.columns(2)
         new_phone = sc1.text_input("Mobile No.", value=st.session_state.seller["phone"])
         new_email = sc2.text_input("Email", value=st.session_state.seller["email"])
-        sc3, sc4 = st.columns(2)
-        new_gstin = sc3.text_input("GSTIN", value=st.session_state.seller["gstin"])
-        new_pan = sc4.text_input("PAN No.", value=st.session_state.seller["pan"])
-        
-        new_terms = st.text_area("Terms and Conditions (Appears at bottom of bill)", value=st.session_state.seller["terms"], height=150)
-        
-        if st.form_submit_button("Save Credentials"):
-            st.session_state.seller.update({
-                "company_name": new_name, "address": new_address,
-                "phone": new_phone, "email": new_email,
-                "gstin": new_gstin, "pan": new_pan, "terms": new_terms
-            })
-            st.success("Seller credentials updated! Generate a new bill to see changes.")
+        sc3, sc4 = st.columns
